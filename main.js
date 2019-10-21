@@ -13,6 +13,8 @@ canvas.height = canvas.clientHeight;
 gl.viewportWidth = canvas.width;
 gl.viewportHeight = canvas.height;
 
+console.log(gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+
 function loadShader(type, src) {
     const shader = gl.createShader(type);
     gl.shaderSource(shader, src);
