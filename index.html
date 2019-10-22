@@ -17,6 +17,10 @@ precision mediump float;
 uniform vec4 uScreenSize;
 uniform float uTime;
 
+float rand(vec2 co){
+    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+}
+
 bool sphere(vec4 sp, vec3 ro, vec3 rd, float tMax, out float t, out vec3 hitPoint, out vec3 hitNormal) {
     vec3 p = sp.xyz;
     float r = sp.w;
@@ -70,12 +74,20 @@ vec4 color(vec3 ro, vec3 rd, vec4[2] sp) {
 
 void main() {
     vec3 eye = vec3(0., 0., 5.);
-    vec3 rd = rayDirection(45., uScreenSize.xy, gl_FragCoord.xy);
+    const int ns = 100;
+
     vec4 spheres[2];
     spheres[0] = vec4(0., 0., 0., 1.);
     spheres[1] = vec4(0., -100.5, -1., 100.);
 
-    gl_FragColor = color(eye, rd, spheres);
+    vec4 col = vec4(0, 0, 0, 0);
+    float ins = 1. / float(ns);
+    for (int i = 0; i < ns; i++) {
+        float rv = rand(gl_FragCoord.xy + float(i) * ins);
+        vec3 rd = rayDirection(45., uScreenSize.xy, gl_FragCoord.xy + rv);
+        col += color(eye, rd, spheres);
+    }
+    gl_FragColor = col * ins;
 }
         </script>
     </head>
