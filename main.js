@@ -72,7 +72,7 @@ function draw() {
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, vertexBuffer.numberOfItems);
 
-    requestAnimationFrame(draw);
+    // requestAnimationFrame(draw);
 }
 
 draw();
