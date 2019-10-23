@@ -32,14 +32,14 @@ struct hitable {
 };
 
 float rand(vec2 co) {
-    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453) * 2. - 1.;
 }
 
-vec3 randomInUnitSphere(vec3 sd) {
+vec3 randomInUnitSphere(float sd) {
     return vec3(
-        rand(vec2(sd[0], sd[0])),
-        rand(vec2(sd[1], sd[1])),
-        rand(vec2(sd[2], sd[2]))
+        rand(vec2(sd += .1, sd += .1)),
+        rand(vec2(sd += .1, sd += .1)),
+        rand(vec2(sd += .1, sd += .1))
     );
 }
 
@@ -88,8 +88,8 @@ vec3 rayDirection(float fov, vec2 size, vec2 fragCoord) {
     return normalize(vec3(xy, -z));
 }
 
-vec3 color(ray r, hitable[2] sp) {
-    const int MAX_RECURSION = 5;
+vec3 color(ray r, hitable[2] sp, float sd) {
+    const int MAX_RECURSION = 20;
     float tMax = FLT_MAX;
     vec3 col = vec3(1);
 
@@ -99,7 +99,7 @@ vec3 color(ray r, hitable[2] sp) {
         if (worldHit(r, 0.001, FLT_MAX, sp, hr)) {
             col *= .5;
 
-            vec3 rd = normalize(hr.p + hr.n + randomInUnitSphere(hr.p));
+            vec3 rd = normalize(hr.p + hr.n + randomInUnitSphere(sd));
             r.o = hr.p;
             r.d = rd;
         } else {
@@ -116,18 +116,22 @@ void main() {
     const int ns = 100;
 
     hitable spheres[2];
-    spheres[0] = hitable(vec3(0, 0, 0), 1.);
-    spheres[1] = hitable(vec3(0, -100.5, -1.), 100.);
+    spheres[0] = hitable(vec3(0, 0, -1), 1.);
+    spheres[1] = hitable(vec3(0, -101, -1.), 100.);
 
+    float sd = rand(gl_FragCoord.xy);
     vec3 col = vec3(0, 0, 0);
     float ins = 1. / float(ns);
     for (int i = 0; i < ns; i++) {
         float rv = rand(gl_FragCoord.xy + float(i) * ins);
         vec3 rd = rayDirection(45., uScreenSize.xy, gl_FragCoord.xy + rv);
         ray r = ray(eye, rd);
-        col += color(r, spheres);
+        col += color(r, spheres, sd);
+        sd += 0.1;
     }
-    gl_FragColor = vec4(col * ins, 1);
+    col = col * ins;
+    col = vec3(sqrt(col[0]), sqrt(col[1]), sqrt(col[2]));
+    gl_FragColor = vec4(col, 1);
 }
         </script>
     </head>
