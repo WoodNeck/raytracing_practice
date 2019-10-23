@@ -17,6 +17,20 @@ precision mediump float;
 uniform vec4 uScreenSize;
 uniform float uTime;
 
+float gSeed = 0.;
+
+struct ray {
+    vec3 o, d;
+};
+struct record {
+    float t;
+    vec3 p, n;
+};
+struct hitable {
+    vec3 c;
+    float r;
+};
+
 float rand(vec2 co) {
     return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
 }
@@ -29,33 +43,42 @@ vec3 randomInUnitSphere(vec3 sd) {
     );
 }
 
-bool sphere(vec4 sp, vec3 ro, vec3 rd, float tMax, out float t, out vec3 hitPoint, out vec3 hitNormal) {
-    vec3 p = sp.xyz;
-    float r = sp.w;
-
-    vec3 oc = ro - p;
-    float a = dot(rd, rd);
-    float b = 2. * dot(oc, rd);
-    float c = dot(oc, oc) - r * r;
+bool sphere(hitable sp, ray r, float tMin, float tMax, out record hr) {
+    vec3 oc = r.o - sp.c;
+    float a = dot(r.d, r.d);
+    float b = dot(oc, r.d);
+    float c = dot(oc, oc) - sp.r * sp.r;
     
-    float d = b * b - 4. * a * c;
-    if (d > 0.) {
-        float val = (-b - sqrt(d)) / (2. * a);
-        if (val > 0. && val < tMax) {
-            hitPoint = ro + val * rd;
-            hitNormal = (hitPoint - p) / r;
-            t = val;
-            return true;
-        }
-        val = (-b + sqrt(d)) / (2. * a);
-        if (val > 0. && val < tMax) {
-            hitPoint = ro + val * rd;
-            hitNormal = (hitPoint - p) / r;
-            t = val;
-            return true;
-        }
+    float d = b * b - a * c;
+    if (d < 0.) return false;
+
+    float s = sqrt(d);
+    
+    float val = (-b - s) / a;
+    if (val > tMin && val < tMax) {
+        hr.p = r.o + val * r.d;
+        hr.n = (hr.p - sp.c) / sp.r;
+        hr.t = val;
+        return true;
     }
+    val = (-b + s) / a;
+    if (val > tMin && val < tMax) {
+        hr.p = r.o + val * r.d;
+        hr.n = (hr.p - sp.c) / sp.r;
+        hr.t = val;
+        return true;
+    }
+
     return false;
+}
+
+bool worldHit(ray r, float tMin, float tMax, hitable[2] sp, out record rec) {
+    bool hit = false;
+
+    hit = hit || sphere(sp[0], r, tMin, tMax, rec);
+    hit = hit || sphere(sp[1], r, tMin, tMax, rec);
+
+    return hit;
 }
 
 vec3 rayDirection(float fov, vec2 size, vec2 fragCoord) {
@@ -65,29 +88,26 @@ vec3 rayDirection(float fov, vec2 size, vec2 fragCoord) {
     return normalize(vec3(xy, -z));
 }
 
-vec4 color(vec3 ro, vec3 rd, vec4[2] sp) {
-    const int ns = 100;
-    bool hit = false;
-    vec3 hitPoint;
-    vec3 hitNormal;
-    float t;
+vec3 color(ray r, hitable[2] sp) {
+    const int MAX_RECURSION = 5;
     float tMax = FLT_MAX;
-    float n = 0.5 * (normalize(rd).y + 1.);
-    vec4 col = vec4((1.0-n)*vec3(1.0, 1.0, 1.0) + n*vec3(0.5, 0.7, 1.0), 1.);
+    vec3 col = vec3(1);
 
-    for (int i = 0; i < ns; i++) {
-        for (int j = 0; j < 2; j++) {
-            hit = hit || sphere(sp[j], ro, rd, tMax, t, hitPoint, hitNormal);
-        }
-        if (!hit) {
+    record hr;
+
+    for (int i = 0; i < MAX_RECURSION; i++) {
+        if (worldHit(r, 0.001, FLT_MAX, sp, hr)) {
+            col *= .5;
+
+            vec3 rd = normalize(hr.p + hr.n + randomInUnitSphere(hr.p));
+            r.o = hr.p;
+            r.d = rd;
+        } else {
+            float t = .5 * r.d.y + .5;
+            col *= mix(vec3(1), vec3(.5, .7, 1.), t);
             return col;
         }
-        
-        vec3 target = hitPoint + hitNormal + randomInUnitSphere(hitPoint);
-
-        col = (col + vec4(0.5 * (hitNormal + 1.), 1.)) / float(i + 1);
     }
-
     return col;
 }
 
@@ -95,18 +115,19 @@ void main() {
     vec3 eye = vec3(0., 0., 5.);
     const int ns = 100;
 
-    vec4 spheres[2];
-    spheres[0] = vec4(0., 0., 0., 1.);
-    spheres[1] = vec4(0., -100.5, -1., 100.);
+    hitable spheres[2];
+    spheres[0] = hitable(vec3(0, 0, 0), 1.);
+    spheres[1] = hitable(vec3(0, -100.5, -1.), 100.);
 
-    vec4 col = vec4(0, 0, 0, 0);
+    vec3 col = vec3(0, 0, 0);
     float ins = 1. / float(ns);
     for (int i = 0; i < ns; i++) {
         float rv = rand(gl_FragCoord.xy + float(i) * ins);
         vec3 rd = rayDirection(45., uScreenSize.xy, gl_FragCoord.xy + rv);
-        col += color(eye, rd, spheres);
+        ray r = ray(eye, rd);
+        col += color(r, spheres);
     }
-    gl_FragColor = col * ins;
+    gl_FragColor = vec4(col * ins, 1);
 }
         </script>
     </head>
