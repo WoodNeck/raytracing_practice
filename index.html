@@ -58,9 +58,7 @@ vec3 rayDirection(float fov, vec2 size, vec2 fragCoord) {
     return normalize(vec3(xy, -z));
 }
 
-bool sphere(hitable sp, ray r, float tMin, float tMax, out record hr, out material mat) {
-    hr.t = FLT_MAX;
-
+bool sphere(hitable sp, ray r, float tMin, inout record hr, out material mat) {
     vec3 oc = r.o - sp.c;
     float a = dot(r.d, r.d);
     float b = dot(oc, r.d);
@@ -72,7 +70,7 @@ bool sphere(hitable sp, ray r, float tMin, float tMax, out record hr, out materi
     float s = sqrt(d);
     
     float val = (-b - s) / a;
-    if (val > tMin && val < tMax) {
+    if (val > tMin && val < hr.t) {
         hr.p = r.o + val * r.d;
         hr.n = (hr.p - sp.c) / sp.r;
         hr.t = val;
@@ -80,7 +78,7 @@ bool sphere(hitable sp, ray r, float tMin, float tMax, out record hr, out materi
         return true;
     }
     val = (-b + s) / a;
-    if (val > tMin && val < tMax) {
+    if (val > tMin && val < hr.t) {
         hr.p = r.o + val * r.d;
         hr.n = (hr.p - sp.c) / sp.r;
         hr.t = val;
@@ -93,19 +91,19 @@ bool sphere(hitable sp, ray r, float tMin, float tMax, out record hr, out materi
 
 bool worldHit(ray r, float tMin, float tMax, hitable[NUM_OBJECTS] sp, out record rec, out material mat) {
     bool hit = false;
+    rec.t = tMax;
 
     for (int i = 0; i < NUM_OBJECTS; i++) {
-        hit = sphere(sp[i], r, tMin, tMax, rec, mat) || hit;
-        tMax = rec.t;
+        hit = sphere(sp[i], r, tMin, rec, mat) || hit;
     }
 
     return hit;
 }
 
 bool scatLamb(inout ray r, record rec, float sd) {
-    vec3 t = rec.p + rec.n + randomInUnitSphere(sd);
+    vec3 t = normalize(rec.n + randomInUnitSphere(sd));
     r.o = rec.p;
-    r.d = t - rec.p;
+    r.d = t;
     return true;
 }
 
