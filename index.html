@@ -17,10 +17,11 @@ precision mediump float;
 uniform vec4 uScreenSize;
 uniform float uTime;
 
-const int NUM_OBJECTS = 4;
+const int NUM_OBJECTS = 5;
 
 const int LAMBERTIAN = 0;
 const int METAL = 1;
+const int DIELECTRIC = 2;
 
 struct ray {
     vec3 o, d;
@@ -56,6 +57,16 @@ vec3 rayDirection(float fov, vec2 size, vec2 fragCoord) {
     float z = size.y / tan(radians(fov) / 2.0);
 
     return normalize(vec3(xy, -z));
+}
+
+bool refract(inout ray r, in vec3 n, float ior, out vec3 refracted) {
+    float dt = dot(r.d, n);
+    float d = 1.0 - ior * ior * (1.0 - dt * dt);
+    if (d > 0.) {
+        refracted = ior * (r.d - n * dt) - n * sqrt(d);
+        return true;
+    }
+    return false;
 }
 
 bool sphere(hitable sp, ray r, float tMin, inout record hr, out material mat) {
@@ -114,6 +125,29 @@ bool scatMetal(inout ray r, record rec) {
     return (dot(reflected, rec.n) > 0.);
 }
 
+bool scatDielectric(inout ray r, record rec) {
+    float ior = 1.5;
+    vec3 reflected = reflect(normalize(r.d), rec.n);
+    vec3 outward_normal = -rec.n;
+    vec3 refracted;
+
+    if (dot(r.d, rec.n) <= 0.) {
+        outward_normal = rec.n;
+        ior = 1. / ior;
+    }
+
+    if (refract(r, outward_normal, ior, refracted)) {
+        r.o = rec.p;
+        r.d = refracted;
+    } else {
+        r.o = rec.p;
+        r.d = reflected;
+        return false;
+    }
+
+    return true;
+}
+
 vec3 color(ray r, hitable[NUM_OBJECTS] sp, float sd) {
     const int MAX_RECURSION = 50;
     float tMax = FLT_MAX;
@@ -126,7 +160,9 @@ vec3 color(ray r, hitable[NUM_OBJECTS] sp, float sd) {
         if (worldHit(r, 0.001, FLT_MAX, sp, hr, mat)) {
             bool scat = mat.type == LAMBERTIAN
                 ? scatLamb(r, hr, sd)
-                : scatMetal(r, hr);
+                : mat.type == METAL
+                    ? scatMetal(r, hr)
+                    : scatDielectric(r, hr);
             if (scat) {
                 col *= mat.albedo;
             } else {
@@ -150,6 +186,7 @@ void main() {
     spheres[1] = hitable(vec3(0, -100.5, -1), 100., material(LAMBERTIAN, vec3(.8, .8, 0)));
     spheres[2] = hitable(vec3(1, 0, -1), .5, material(METAL, vec3(.8, .6, .2)));
     spheres[3] = hitable(vec3(-1, 0, -1), .5, material(METAL, vec3(.8, .8, .8)));
+    spheres[4] = hitable(vec3(0, .75, -1), .25, material(DIELECTRIC, vec3(1., 1., 1.)));
 
     float sd = rand(gl_FragCoord.xy);
     vec3 col = vec3(0, 0, 0);
