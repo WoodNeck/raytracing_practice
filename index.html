@@ -17,7 +17,7 @@ precision mediump float;
 uniform vec4 uScreenSize;
 uniform float uTime;
 
-const int NUM_OBJECTS = 5;
+const int NUM_OBJECTS = 4;
 
 const int LAMBERTIAN = 0;
 const int METAL = 1;
@@ -42,6 +42,12 @@ struct hitable {
 
 float rand(vec2 co) {
     return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453) * 2. - 1.;
+}
+
+float schlick(float cosine, float ref_idx) {
+    float r0 = (1. - ref_idx) / (1. + ref_idx);
+    r0 = r0 * r0;
+    return r0 + (1. - r0) * pow((1. - cosine), 5.);
 }
 
 vec3 randomInUnitSphere(float sd) {
@@ -125,24 +131,35 @@ bool scatMetal(inout ray r, record rec) {
     return (dot(reflected, rec.n) > 0.);
 }
 
-bool scatDielectric(inout ray r, record rec) {
-    float ior = 1.5;
+bool scatDielectric(inout ray r, record rec, float sd) {
+    float ri = 1.5;
+    float ior = ri;
     vec3 reflected = reflect(normalize(r.d), rec.n);
     vec3 outward_normal = -rec.n;
     vec3 refracted;
 
+    float reflect_prob;
+    float cosine = dot(r.d, rec.n);
+    cosine = sqrt(1. - ri*ri*(1.0-cosine*cosine));
+
     if (dot(r.d, rec.n) <= 0.) {
         outward_normal = rec.n;
         ior = 1. / ior;
+        cosine = ri * -dot(r.d, rec.n);
     }
 
     if (refract(r, outward_normal, ior, refracted)) {
-        r.o = rec.p;
-        r.d = refracted;
+        reflect_prob = schlick(cosine, ri);
     } else {
+        reflect_prob = 1.0;
+    }
+
+    if (sd < reflect_prob) {
         r.o = rec.p;
         r.d = reflected;
-        return false;
+    } else {
+        r.o = rec.p;
+        r.d = refracted;
     }
 
     return true;
@@ -162,7 +179,7 @@ vec3 color(ray r, hitable[NUM_OBJECTS] sp, float sd) {
                 ? scatLamb(r, hr, sd)
                 : mat.type == METAL
                     ? scatMetal(r, hr)
-                    : scatDielectric(r, hr);
+                    : scatDielectric(r, hr, sd);
             if (scat) {
                 col *= mat.albedo;
             } else {
@@ -182,11 +199,10 @@ void main() {
     const int ns = 100;
 
     hitable spheres[NUM_OBJECTS];
-    spheres[0] = hitable(vec3(0, 0, -1), .5, material(LAMBERTIAN, vec3(.8, .3, .3)));
+    spheres[0] = hitable(vec3(0, 0, -1), .5, material(LAMBERTIAN, vec3(.1, .2, .5)));
     spheres[1] = hitable(vec3(0, -100.5, -1), 100., material(LAMBERTIAN, vec3(.8, .8, 0)));
     spheres[2] = hitable(vec3(1, 0, -1), .5, material(METAL, vec3(.8, .6, .2)));
-    spheres[3] = hitable(vec3(-1, 0, -1), .5, material(METAL, vec3(.8, .8, .8)));
-    spheres[4] = hitable(vec3(0, .75, -1), .25, material(DIELECTRIC, vec3(1., 1., 1.)));
+    spheres[3] = hitable(vec3(-1, 0, -1), .5, material(DIELECTRIC, vec3(1., 1., 1.)));
 
     float sd = rand(gl_FragCoord.xy);
     vec3 col = vec3(0, 0, 0);
@@ -197,6 +213,7 @@ void main() {
         ray r = ray(eye, rd);
         col += color(r, spheres, sd);
         sd += 0.1;
+        sd = fract(sd);
     }
     col = col * ins;
     col = vec3(sqrt(col[0]), sqrt(col[1]), sqrt(col[2]));
