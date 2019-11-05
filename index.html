@@ -39,6 +39,17 @@ struct hitable {
     float r;
     material mat;
 };
+struct camprop {
+    vec3 lower_left_corner;
+    vec3 horizontal;
+    vec3 vertical;
+};
+struct camera {
+    vec3 o;
+    vec3 d;
+    vec3 up;
+    camprop prop;
+};
 
 highp float rand(vec2 co) {
     highp float a = 12.9898;
@@ -63,9 +74,30 @@ vec3 randomInUnitSphere(float sd) {
     );
 }
 
+camprop getCameraProp(vec3 lookFrom, vec3 lookAt, vec3 up, float fov, float aspect) {
+    float half_height = tan(radians(fov * .5));
+    float half_width = aspect * half_height;
+
+    vec3 w = normalize(lookFrom - lookAt);
+    vec3 u = normalize(cross(up, w));
+    vec3 v = cross(w, u);
+    vec3 lower_left_corner = lookFrom - half_width * u - half_height * v - w;
+    vec3 horizontal = 2. * half_width * u;
+    vec3 vertical = 2. * half_height * v;
+    return camprop(lower_left_corner, horizontal, vertical);
+}
+
+ray getRay(camera cam, vec2 coord) {
+    vec3 rd = normalize(cam.prop.lower_left_corner
+        + coord.x * cam.prop.horizontal
+        + coord.y * cam.prop.vertical
+        - cam.o);
+    return ray(cam.o, rd);
+}
+
 vec3 rayDirection(float fov, vec2 size, vec2 fragCoord) {
-    vec2 xy = fragCoord - size / 2.0;
-    float z = size.y / tan(radians(fov) / 2.0);
+    vec2 xy = fragCoord - size * .5;
+    float z = size.y / tan(radians(fov) * .5);
 
     return normalize(vec3(xy, -z));
 }
@@ -200,7 +232,16 @@ vec3 color(ray r, hitable[NUM_OBJECTS] sp, float sd, int rayIdx) {
 }
 
 void main() {
-    vec3 eye = vec3(0., 0., 4.);
+    // set camera
+    vec3 lookFrom = vec3(-2, 2, 1);
+    vec3 lookAt = vec3(0, 0, -1);
+    vec3 up = vec3(0, 1, 0);
+    float vFov = 60.0;
+    float aspect = uScreenSize.x / uScreenSize.y;
+
+    camprop prop = getCameraProp(lookFrom, lookAt, up, vFov, aspect);
+    camera cam = camera(lookFrom, lookAt, up, prop);
+
     const int ns = 100;
 
     hitable spheres[NUM_OBJECTS];
@@ -216,8 +257,7 @@ void main() {
     for (int i = 0; i < ns; i++) {
         float rx = 2. * rand(gl_FragCoord.xx + float(i) * ins) - 1.;
         float ry = 2. * rand(gl_FragCoord.yy + float(i) * ins) - 1.;
-        vec3 rd = rayDirection(45., uScreenSize.xy, gl_FragCoord.xy + vec2(rx, ry));
-        ray r = ray(eye, rd);
+        ray r = getRay(cam, (gl_FragCoord.xy + vec2(rx, ry)) / uScreenSize.xy);
         col += color(r, spheres, sd, i);
         sd += 0.1;
         sd = fract(sd);
